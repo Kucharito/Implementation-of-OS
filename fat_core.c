@@ -215,7 +215,11 @@ static unsigned int digits10(unsigned int v)
 static void print_dec_width(unsigned int v, unsigned int w)
 {
     unsigned int d = digits10(v);
-    while (d < w) { console_putc(' '); d++; }
+    while (d < w)
+    {
+        console_putc(' ');
+        d++;
+    }
     print_dec(v);
 }
 
@@ -279,7 +283,6 @@ void dir_listing()
             for (int k = 2; k >= 0 && ext[k] == ' '; k--)
                 ext[k] = 0;
 
-            /* dátum čas */
             print_2d(month);
             console_putc('/');
             print_2d(day);
@@ -293,7 +296,6 @@ void dir_listing()
             console_putc(' ');
             console_putc(' ');
 
-            /* DOS stĺpce */
             if (entry->attributes & 0x10)
             {
                 print_string("   <DIR>    ");
