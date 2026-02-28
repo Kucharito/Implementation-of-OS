@@ -109,7 +109,6 @@ int name_match(Fat16Entry *entry, char *filename)
 
 void read_file(char *filename)
 {
-    print_string("Searching...\n");
     u32 partition_start = pt[0].start_sector;
 
     u32 fat_start =
@@ -155,14 +154,7 @@ void read_file(char *filename)
             {
                 start_cluster = entry->starting_cluster;
                 file_size = entry->file_size;
-                print_string("MATCH\n");
-                print_string("Cluster: ");
-                print_dec(start_cluster);
-                console_putc('\n');
-
-                print_string("Size: ");
-                print_dec(file_size);
-                console_putc('\n');
+                
                 found = 1;
                 break;
             }
@@ -174,9 +166,6 @@ void read_file(char *filename)
 
     u16 cluster = start_cluster;
     u32 remaining = file_size;
-    print_string("Remaining: ");
-    print_dec(remaining);
-    console_putc('\n');
     while (cluster < 0xFFF8)
     {
 
