@@ -1,59 +1,56 @@
 
-typedef unsigned char  u8;
-typedef unsigned short u16;
-typedef unsigned int   u32;
-
 #define SECTOR_SIZE 512
 
 typedef struct {
-    u8  first_byte;
-    u8  start_chs[3];
-    u8  partition_type;
-    u8  end_chs[3];
-    u32 start_sector;
-    u32 length_sectors;
+    unsigned char  first_byte;
+    unsigned char  start_chs[3];
+    unsigned char  partition_type;
+    unsigned char  end_chs[3];
+    unsigned int start_sector;
+    unsigned int length_sectors;
 } __attribute__((packed)) PartitionTable;
 
 typedef struct {
-    u8  jmp[3];
+    unsigned char  jmp[3];
     char oem[8];
-    u16 sector_size;
-    u8  sectors_per_cluster;
-    u16 reserved_sectors;
-    u8  number_of_fats;
-    u16 root_dir_entries;
-    u16 total_sectors_short;
-    u8  media_descriptor;
-    u16 fat_size_sectors;
-    u16 sectors_per_track;
-    u16 number_of_heads;
-    u32 hidden_sectors;
-    u32 total_sectors_int;
-    u8  drive_number;
-    u8  current_head;
-    u8  boot_signature;
-    u32 volume_id;
+    unsigned short sector_size;
+    unsigned char  sectors_per_cluster;
+    unsigned short reserved_sectors;
+    unsigned char  number_of_fats;
+    unsigned short root_dir_entries;
+    unsigned short total_sectors_short;
+    unsigned char  media_descriptor;
+    unsigned short fat_size_sectors;
+    unsigned short sectors_per_track;
+    unsigned short number_of_heads;
+    unsigned int hidden_sectors;
+    unsigned int total_sectors_int;
+    unsigned char  drive_number;
+    unsigned char  current_head;
+    unsigned char  boot_signature;
+    unsigned int volume_id;
     char volume_label[11];
     char fs_type[8];
-    u8  boot_code[448];
-    u16 boot_sector_signature;
+    unsigned char  boot_code[448];
+    unsigned short boot_sector_signature;
 } __attribute__((packed)) Fat16BootSector;
 
 typedef struct {
-    u8  filename[8];
-    u8  ext[3];
-    u8  attributes;
-    u8  reserved[10];
-    u16 modify_time;
-    u16 modify_date;
-    u16 starting_cluster;
-    u32 file_size;
+    unsigned char  filename[8];
+    unsigned char  ext[3];
+    unsigned char  attributes;
+    unsigned char  reserved[10];
+    unsigned short modify_time;
+    unsigned short modify_date;
+    unsigned short starting_cluster;
+    unsigned int file_size;
 } __attribute__((packed)) Fat16Entry;
 
-/* abstrakcie */
+
+void fat16_init(void);
+void read_file(char *filename);
+void dir_listing(void);
+
+int ata_read_sector(unsigned int lba, unsigned char *buffer);
 void console_putc(char c);
-void console_write(const char *buf, u32 len);
-int disk_read_sector(u32 lba, u8 *buffer);
-void *k_memcpy(void *dest, const void *src, u32 n);
-void *k_memset(void *dest, int val, u32 n);
-u32 k_strlen(const char *str);
+void console_write(const char *buf, unsigned int len);

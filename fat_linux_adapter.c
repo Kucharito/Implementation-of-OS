@@ -7,7 +7,7 @@ void dir_listing();
 
 static FILE *disk;
 
-int ata_read_sector(u32 lba, u8 *buffer)
+int ata_read_sector(unsigned int lba, unsigned char *buffer)
 {
     fseek(disk, lba * SECTOR_SIZE, SEEK_SET);
     return fread(buffer, SECTOR_SIZE, 1, disk);
@@ -18,9 +18,9 @@ void console_putc(char c)
     putchar(c);
 }
 
-void console_write(const char *buf, u32 len)
+void console_write(const char *buf, unsigned int len)
 {
-    for (u32 i = 0; i < len; i++)
+    for (unsigned int i = 0; i < len; i++)
         putchar(buf[i]);
 }
 
@@ -32,10 +32,10 @@ int main(int argc, char **argv)
     fat16_init();
 
     if (argc == 2)
-        /* ./fat ABSTRAKT.TXT */
+        // ./fat ABSTRAKT.TXT 
         read_file(argv[1]);
     else
-        /* ./fat */
+        // ./fat 
         dir_listing();
 
     fclose(disk);

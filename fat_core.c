@@ -1,42 +1,38 @@
 #include "fat.h"
 
-
-static u8 sector_buffer[SECTOR_SIZE];
+static unsigned char sector_buffer[SECTOR_SIZE];
 static PartitionTable pt[4];
 static Fat16BootSector bs;
 
-
-int ata_read_sector(u32 lba, u8 *buffer);
+int ata_read_sector(unsigned int lba, unsigned char *buffer);
 void console_putc(char c);
-void console_write(const char *buf, u32 len);
+void console_write(const char *buf, unsigned int len);
 
-
-void *k_memcpy(void *dest, const void *src, u32 n)
+void *k_memcpy(void *dest, const void *src, unsigned int n)
 {
-    u8 *d = dest;
-    const u8 *s = src;
+    unsigned char *d = dest;
+    const unsigned char *s = src;
 
-    for (u32 i = 0; i < n; i++)
+    for (unsigned int i = 0; i < n; i++)
         d[i] = s[i];
 
     return dest;
 }
 
-u32 k_strlen(const char *str)
+unsigned int k_strlen(const char *str)
 {
-    u32 len = 0;
+    unsigned int len = 0;
     while (str[len])
         len++;
     return len;
 }
-
 
 void print_string(const char *s)
 {
     console_write(s, k_strlen(s));
 }
 
-void print_dec(u32 value)
+void print_dec(unsigned int value)
 {
     char buffer[16];
     int i = 0;
@@ -57,14 +53,10 @@ void print_dec(u32 value)
         console_putc(buffer[i]);
 }
 
-
-
-int read_sector(u32 sector, u8 *buffer)
+int read_sector(unsigned int sector, unsigned char *buffer)
 {
     return ata_read_sector(sector, buffer);
 }
-
-
 
 void fat16_init()
 {
@@ -74,8 +66,6 @@ void fat16_init()
     read_sector(pt[0].start_sector, sector_buffer);
     k_memcpy(&bs, sector_buffer, sizeof(Fat16BootSector));
 }
-
-
 
 int name_match(Fat16Entry *entry, char *filename)
 {
@@ -106,34 +96,33 @@ int name_match(Fat16Entry *entry, char *filename)
     return 1;
 }
 
-
 void read_file(char *filename)
 {
-    u32 partition_start = pt[0].start_sector;
+    unsigned int partition_start = pt[0].start_sector;
 
-    u32 fat_start =
+    unsigned int fat_start =
         partition_start + bs.reserved_sectors;
 
-    u32 root_start =
+    unsigned int root_start =
         partition_start +
         bs.reserved_sectors +
         bs.number_of_fats * bs.fat_size_sectors;
 
-    u32 root_dir_sectors =
+    unsigned int root_dir_sectors =
         (bs.root_dir_entries * sizeof(Fat16Entry) + bs.sector_size - 1) / bs.sector_size;
 
-    u32 data_start =
+    unsigned int data_start =
         root_start + root_dir_sectors;
 
-    u16 start_cluster = 0;
-    u32 file_size = 0;
+    unsigned short start_cluster = 0;
+    unsigned int file_size = 0;
     int found = 0;
-    for (u32 i = 0; i < root_dir_sectors; i++)
+    for (unsigned int i = 0; i < root_dir_sectors; i++)
     {
 
         read_sector(root_start + i, sector_buffer);
 
-        for (u32 j = 0;
+        for (unsigned int j = 0;
              j < bs.sector_size / sizeof(Fat16Entry);
              j++)
         {
@@ -149,12 +138,12 @@ void read_file(char *filename)
 
             if (entry->attributes & 0x10)
                 continue;
-            
+
             if (name_match(entry, filename))
             {
                 start_cluster = entry->starting_cluster;
                 file_size = entry->file_size;
-                
+
                 found = 1;
                 break;
             }
@@ -164,22 +153,22 @@ void read_file(char *filename)
     if (!start_cluster)
         return;
 
-    u16 cluster = start_cluster;
-    u32 remaining = file_size;
+    unsigned short cluster = start_cluster;
+    unsigned int remaining = file_size;
     while (cluster < 0xFFF8)
     {
 
-        u32 first_sector =
+        unsigned int first_sector =
             data_start + (cluster - 2) * bs.sectors_per_cluster;
 
-        for (u32 s = 0;
+        for (unsigned int s = 0;
              s < bs.sectors_per_cluster && remaining;
              s++)
         {
 
             read_sector(first_sector + s, sector_buffer);
 
-            u32 to_write =
+            unsigned int to_write =
                 remaining < bs.sector_size
                     ? remaining
                     : bs.sector_size;
@@ -193,41 +182,65 @@ void read_file(char *filename)
                 return;
         }
 
-        u32 fat_sector =
+        unsigned int fat_sector =
             fat_start + (cluster * 2) / bs.sector_size;
 
-        u32 fat_offset =
+        unsigned int fat_offset =
             (cluster * 2) % bs.sector_size;
 
         read_sector(fat_sector, sector_buffer);
 
-        u8 *p = sector_buffer + fat_offset;
+        unsigned char *p = sector_buffer + fat_offset;
         cluster = p[0] | (p[1] << 8);
     }
 }
 
+static void print_2d(unsigned int v)
+{
+    if (v < 10)
+        console_putc('0');
+    print_dec(v);
+}
+static unsigned int digits10(unsigned int v)
+{
+    unsigned int d = 1;
+    while (v >= 10)
+    {
+        v /= 10;
+        d++;
+    }
+    return d;
+}
+
+static void print_dec_width(unsigned int v, unsigned int w)
+{
+    unsigned int d = digits10(v);
+    while (d < w) { console_putc(' '); d++; }
+    print_dec(v);
+}
+
 void dir_listing()
 {
-    u32 partition_start = pt[0].start_sector;
+    unsigned int partition_start = pt[0].start_sector;
 
-    u32 root_start =
+    unsigned int root_start =
         partition_start +
         bs.reserved_sectors +
         bs.number_of_fats * bs.fat_size_sectors;
 
-    u32 root_dir_sectors =
+    unsigned int root_dir_sectors =
         (bs.root_dir_entries * sizeof(Fat16Entry) + bs.sector_size - 1) / bs.sector_size;
 
-    u32 file_count = 0;
-    u32 dir_count = 0;
-    u32 total_size = 0;
+    unsigned int file_count = 0;
+    unsigned int dir_count = 0;
+    unsigned int total_size = 0;
 
-    for (u32 i = 0; i < root_dir_sectors; i++)
+    for (unsigned int i = 0; i < root_dir_sectors; i++)
     {
 
         read_sector(root_start + i, sector_buffer);
 
-        for (u32 j = 0;
+        for (unsigned int j = 0;
              j < bs.sector_size / sizeof(Fat16Entry);
              j++)
         {
@@ -236,7 +249,7 @@ void dir_listing()
                 (Fat16Entry *)(sector_buffer + j * sizeof(Fat16Entry));
 
             if (entry->filename[0] == 0x00)
-                return;
+                goto end_listing;
 
             if (entry->filename[0] == 0xE5)
                 continue;
@@ -244,14 +257,12 @@ void dir_listing()
             if (entry->attributes & 0x08)
                 continue;
 
-            /* dátum */
-            u16 year = ((entry->modify_date >> 9) & 0x7F) + 1980;
-            u16 month = (entry->modify_date >> 5) & 0x0F;
-            u16 day = entry->modify_date & 0x1F;
+            unsigned short year = ((entry->modify_date >> 9) & 0x7F) + 1980;
+            unsigned short month = (entry->modify_date >> 5) & 0x0F;
+            unsigned short day = entry->modify_date & 0x1F;
 
-            /* čas */
-            u16 hour = (entry->modify_time >> 11) & 0x1F;
-            u16 min = (entry->modify_time >> 5) & 0x3F;
+            unsigned short hour = (entry->modify_time >> 11) & 0x1F;
+            unsigned short min = (entry->modify_time >> 5) & 0x3F;
 
             char name[9];
             char ext[4];
@@ -268,41 +279,38 @@ void dir_listing()
             for (int k = 2; k >= 0 && ext[k] == ' '; k--)
                 ext[k] = 0;
 
-            /* výpis dátumu */
-            print_dec(month);
+            /* dátum čas */
+            print_2d(month);
             console_putc('/');
-            print_dec(day);
+            print_2d(day);
             console_putc('/');
             print_dec(year);
             console_putc(' ');
 
-            print_dec(hour);
+            print_2d(hour);
             console_putc(':');
-            print_dec(min);
+            print_2d(min);
             console_putc(' ');
             console_putc(' ');
 
+            /* DOS stĺpce */
             if (entry->attributes & 0x10)
             {
-
-                print_string("<DIR>      ");
+                print_string("   <DIR>    ");
                 print_string(name);
                 console_putc('\n');
                 dir_count++;
             }
             else
             {
-
-                print_dec(entry->file_size);
+                print_dec_width(entry->file_size, 10); // 10 znakov doprava
                 print_string("  ");
                 print_string(name);
-
                 if (ext[0])
                 {
                     console_putc('.');
                     print_string(ext);
                 }
-
                 console_putc('\n');
 
                 file_count++;
@@ -310,6 +318,8 @@ void dir_listing()
             }
         }
     }
+
+end_listing:
 
     console_putc('\n');
     print_dec(file_count);
