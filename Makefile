@@ -1,5 +1,5 @@
 all:
-	gcc fat.c -o fat
+	gcc fat_core.c fat_linux_adapter.c -o fat
 
 clean:
 	rm -f fat
