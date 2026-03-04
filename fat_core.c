@@ -8,6 +8,7 @@ int ata_read_sector(unsigned int lba, unsigned char *buffer);
 void console_putc(char c);
 void console_write(const char *buf, unsigned int len);
 
+// Skopíruje n bajtov z src do dest.
 void *k_memcpy(void *dest, const void *src, unsigned int n)
 {
     unsigned char *d = dest;
@@ -19,6 +20,7 @@ void *k_memcpy(void *dest, const void *src, unsigned int n)
     return dest;
 }
 
+// Vráti dĺžku C reťazca bez ukončovacieho nulového znaku.
 unsigned int k_strlen(const char *str)
 {
     unsigned int len = 0;
@@ -27,11 +29,13 @@ unsigned int k_strlen(const char *str)
     return len;
 }
 
+// Vypíše celý reťazec na konzolu.
 void print_string(const char *s)
 {
     console_write(s, k_strlen(s));
 }
 
+// Vypíše nezáporné číslo v desiatkovej sústave.
 void print_dec(unsigned int value)
 {
     char buffer[16];
@@ -53,11 +57,13 @@ void print_dec(unsigned int value)
         console_putc(buffer[i]);
 }
 
+// Tenký wrapper nad ATA čítaním jedného sektora.
 int read_sector(unsigned int sector, unsigned char *buffer)
 {
     return ata_read_sector(sector, buffer);
 }
 
+// Načíta MBR a FAT16 boot sektor z prvej partície.
 void fat16_init()
 {
     read_sector(0, sector_buffer);
@@ -67,6 +73,7 @@ void fat16_init()
     k_memcpy(&bs, sector_buffer, sizeof(Fat16BootSector));
 }
 
+// Porovná 8.3 názov položky s požadovaným názvom súboru.
 int name_match(Fat16Entry *entry, char *filename)
 {
     int i = 0;
@@ -96,6 +103,7 @@ int name_match(Fat16Entry *entry, char *filename)
     return 1;
 }
 
+// Nájde súbor v root adresári a vypíše jeho obsah na konzolu.
 void read_file(char *filename)
 {
     unsigned int partition_start = pt[0].start_sector;
@@ -195,12 +203,15 @@ void read_file(char *filename)
     }
 }
 
+// Vypíše číslo minimálne na 2 znaky (s nulou na začiatku).
 static void print_2d(unsigned int v)
 {
     if (v < 10)
         console_putc('0');
     print_dec(v);
 }
+
+// Zistí počet desiatkových číslic hodnoty.
 static unsigned int digits10(unsigned int v)
 {
     unsigned int d = 1;
@@ -212,6 +223,7 @@ static unsigned int digits10(unsigned int v)
     return d;
 }
 
+// Vypíše číslo zarovnané doprava na danú šírku.
 static void print_dec_width(unsigned int v, unsigned int w)
 {
     unsigned int d = digits10(v);
@@ -223,6 +235,7 @@ static void print_dec_width(unsigned int v, unsigned int w)
     print_dec(v);
 }
 
+// Vypíše obsah root adresára podobne ako jednoduchý DIR výpis.
 void dir_listing()
 {
     unsigned int partition_start = pt[0].start_sector;
@@ -238,6 +251,7 @@ void dir_listing()
     unsigned int file_count = 0;
     unsigned int dir_count = 0;
     unsigned int total_size = 0;
+    int done = 0;
 
     for (unsigned int i = 0; i < root_dir_sectors; i++)
     {
@@ -253,7 +267,10 @@ void dir_listing()
                 (Fat16Entry *)(sector_buffer + j * sizeof(Fat16Entry));
 
             if (entry->filename[0] == 0x00)
-                goto end_listing;
+            {
+                done = 1;
+                break;
+            }
 
             if (entry->filename[0] == 0xE5)
                 continue;
@@ -293,20 +310,19 @@ void dir_listing()
             print_2d(hour);
             console_putc(':');
             print_2d(min);
-            console_putc(' ');
-            console_putc(' ');
+            print_string("      ");
 
             if (entry->attributes & 0x10)
             {
-                print_string("   <DIR>    ");
+                print_string("   <DIR>              ");
                 print_string(name);
                 console_putc('\n');
                 dir_count++;
             }
             else
             {
-                print_dec_width(entry->file_size, 10); // 10 znakov doprava
-                print_string("  ");
+                print_dec_width(entry->file_size, 16);
+                print_string("      ");
                 print_string(name);
                 if (ext[0])
                 {
@@ -319,9 +335,10 @@ void dir_listing()
                 total_size += entry->file_size;
             }
         }
-    }
 
-end_listing:
+        if (done)
+            break;
+    }
 
     console_putc('\n');
     print_dec(file_count);

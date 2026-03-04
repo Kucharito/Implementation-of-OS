@@ -24,23 +24,7 @@ void console_write(const char *buf, unsigned int len)
         putchar(buf[i]);
 }
 
-/*int main(int argc, char **argv)
-{
-    disk = fopen("sd.img", "rb");
-    if (!disk) return 1;
 
-    fat16_init();
-
-    if (argc == 2)
-        // ./fat ABSTRAKT.TXT 
-        read_file(argv[1]);
-    else
-        // ./fat 
-        dir_listing();
-
-    fclose(disk);
-    return 0;
-}*/
 int main(void)
 {
     disk = fopen("sd.img", "rb");
@@ -50,6 +34,7 @@ int main(void)
 
     dir_listing();
 
+    //read_file("FAT16.JPG");
     read_file("ABSTRAKT.TXT");
 
     fclose(disk);
