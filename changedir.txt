@@ -1,0 +1,138 @@
+int changeDir(char *path)
+{
+    const char *p = path;
+    char component[13];
+    unsigned short target_cluster;
+
+    if (!path || path[0] == 0)
+        return 0;
+
+    target_cluster = (path[0] == '/') ? 0 : cwd_cluster;
+
+    while (parse_path_component(&p, component, sizeof(component)))
+    {
+        if (component[0] == 0)
+            continue;
+
+        if (str_eq(component, "."))
+            continue;
+
+        if (str_eq(component, ".."))
+        {
+            target_cluster = get_parent_cluster(target_cluster);
+            continue;
+        }
+
+        Fat16Entry next_dir;
+        if (!find_in_directory(target_cluster, component, 1, &next_dir))
+            return -1;
+
+        if (next_dir.starting_cluster < 2)
+            target_cluster = 0;
+        else
+            target_cluster = next_dir.starting_cluster;
+    }
+
+    cwd_cluster = target_cluster;
+    return 0;
+}
+
+
+
+static int find_in_directory(unsigned short dir_cluster,
+                             char *name,
+                             int want_directory,
+                             Fat16Entry *out_entry)
+{
+    if (dir_cluster == 0)
+    {
+        for (unsigned int i = 0; i < root_dir_sectors; i++)
+        {
+            read_sector(root_start_lba + i, sector_buffer);
+
+            for (unsigned int j = 0; j < bs.sector_size / sizeof(Fat16Entry); j++)
+            {
+                Fat16Entry *entry =
+                    (Fat16Entry *)(sector_buffer + j * sizeof(Fat16Entry));
+
+                if (entry->filename[0] == 0x00)
+                    return 0;
+
+                if (entry->filename[0] == 0xE5)
+                    continue;
+
+                if (entry->attributes & 0x08)
+                    continue;
+
+                if (want_directory)
+                {
+                    if (!(entry->attributes & 0x10))
+                        continue;
+                }
+                else
+                {
+                    if (entry->attributes & 0x10)
+                        continue;
+                }
+
+                if (name_match(entry, name))
+                {
+                    if (out_entry)
+                        k_memcpy(out_entry, entry, sizeof(Fat16Entry));
+                    return 1;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    unsigned short cluster = dir_cluster;
+    while (cluster >= 2 && cluster < 0xFFF8)
+    {
+        unsigned int first_sector =
+            data_start_lba + (cluster - 2) * bs.sectors_per_cluster;
+
+        for (unsigned int s = 0; s < bs.sectors_per_cluster; s++)
+        {
+            read_sector(first_sector + s, sector_buffer);
+
+            for (unsigned int j = 0; j < bs.sector_size / sizeof(Fat16Entry); j++)
+            {
+                Fat16Entry *entry =
+                    (Fat16Entry *)(sector_buffer + j * sizeof(Fat16Entry));
+
+                if (entry->filename[0] == 0x00)
+                    return 0;
+
+                if (entry->filename[0] == 0xE5)
+                    continue;
+
+                if (entry->attributes & 0x08)
+                    continue;
+
+                if (want_directory)
+                {
+                    if (!(entry->attributes & 0x10))
+                        continue;
+                }
+                else
+                {
+                    if (entry->attributes & 0x10)
+                        continue;
+                }
+
+                if (name_match(entry, name))
+                {
+                    if (out_entry)
+                        k_memcpy(out_entry, entry, sizeof(Fat16Entry));
+                    return 1;
+                }
+            }
+        }
+
+        cluster = fat_next_cluster(cluster);
+    }
+
+    return 0;
+}

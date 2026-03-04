@@ -32,9 +32,30 @@ int main(void)
 
     fat16_init();
 
+    printf("=== ROOT DIR ===\n");
     dir_listing();
 
-    //read_file("FAT16.JPG");
+    printf("\n=== changeDir(\"ADR1\") ===\n");
+    if (changeDir("ADR1") == 0)
+    {
+        dir_listing();
+    }
+    else
+    {
+        printf("changeDir failed\n");
+    }
+
+    printf("\n=== changeDir(\"..\") ===\n");
+    if (changeDir("..") == 0)
+    {
+        dir_listing();
+    }
+    else
+    {
+        printf("changeDir back failed\n");
+    }
+
+    printf("\n=== read_file in ROOT ===\n");
     read_file("ABSTRAKT.TXT");
 
     fclose(disk);

@@ -48,6 +48,7 @@ typedef struct {
 
 
 void fat16_init(void);
+int changeDir(char *path);
 void read_file(char *filename);
 void dir_listing(void);
 
