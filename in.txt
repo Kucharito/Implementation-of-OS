@@ -1,0 +1,1 @@
+Ahoj bez malloc/free
