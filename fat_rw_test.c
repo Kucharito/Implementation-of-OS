@@ -49,3 +49,7 @@ int main(void) {
     printf("OK\n");
     return 0;
 }
+
+//gcc -I. fat_state.c fat_common.c fat_disk.c fat_init.c fat_search.c fat_tree.c fat_dir.c fat_file.c fat_rw.c fat_linux_adapter_io.c fat_rw_test.c -o fat_rw_test
+
+//./fat_rw_test

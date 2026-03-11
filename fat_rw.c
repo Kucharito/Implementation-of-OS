@@ -1,11 +1,6 @@
 #include "fat_internal.h"
 
-typedef struct {
-    unsigned int sector;
-    unsigned int offset;
-} DirSlot;
-
-static void format_83_name(const char *filename, unsigned char out_name[8], unsigned char out_ext[3])
+void format_83_name(const char *filename, unsigned char out_name[8], unsigned char out_ext[3])
 {
     for (int i = 0; i < 8; i++)
         out_name[i] = ' ';
@@ -36,7 +31,7 @@ static void format_83_name(const char *filename, unsigned char out_name[8], unsi
     }
 }
 
-static int find_dir_slot(unsigned short dir_cluster, char *name, int want_free, DirSlot *slot, Fat16Entry *entry_out)
+int find_dir_slot(unsigned short dir_cluster, char *name, int want_free, DirSlot *slot, Fat16Entry *entry_out)
 {
     int seen_end = 0;
 
@@ -158,7 +153,7 @@ static int find_dir_slot(unsigned short dir_cluster, char *name, int want_free, 
     return 0;
 }
 
-static unsigned short find_free_cluster(void)
+unsigned short find_free_cluster(void)
 {
     unsigned int total_clusters = (bs.fat_size_sectors * bs.sector_size) / 2;
     for (unsigned short c = 2; c < total_clusters; c++)
@@ -169,7 +164,7 @@ static unsigned short find_free_cluster(void)
     return 0;
 }
 
-static void free_chain(unsigned short start_cluster)
+void free_chain(unsigned short start_cluster)
 {
     unsigned short cluster = start_cluster;
     while (cluster >= 2 && cluster < 0xFFF8)

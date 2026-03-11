@@ -12,6 +12,11 @@ extern unsigned int root_start_lba;
 extern unsigned int root_dir_sectors;
 extern unsigned int data_start_lba;
 
+typedef struct {
+	unsigned int sector;
+	unsigned int offset;
+} DirSlot;
+
 void *k_memcpy(void *dest, const void *src, unsigned int n);
 unsigned int k_strlen(const char *str);
 void print_string(const char *s);
@@ -34,5 +39,10 @@ unsigned short get_parent_cluster(unsigned short dir_cluster);
 
 void entry_name_copy(Fat16Entry *entry, char *name);
 void entry_ext_copy(Fat16Entry *entry, char *ext);
+void *k_memset(void *dest, int value, unsigned int n);
+void format_83_name(const char *filename, unsigned char out_name[8], unsigned char out_ext[3]);
+int find_dir_slot(unsigned short dir_cluster, char *name, int want_free, DirSlot *slot, Fat16Entry *entry_out);
+unsigned short find_free_cluster(void);
+void free_chain(unsigned short start_cluster);
 
 #endif

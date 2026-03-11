@@ -51,6 +51,16 @@ unsigned int k_strlen(const char *str)
     return len;
 }
 
+void *k_memset(void *dest, int value, unsigned int n)
+{
+    unsigned char *d = dest;
+    for (unsigned int i = 0; i < n; i++)
+    {
+        d[i] = (unsigned char)value;
+    }
+    return dest;
+}
+
 void print_string(const char *s)
 {
     console_write(s, k_strlen(s));
