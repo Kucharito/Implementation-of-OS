@@ -40,14 +40,15 @@ mbr.bin: mbr.asm
 
 os-image.bin: mbr.bin kernel.bin
 >cat $^ > $@
+>truncate -s 1474560 $@
 
 run: os-image.bin
 >cp $< os-image-ide.bin
->$(QEMU_CLEAN_ENV) $(QEMU) -drive format=raw,file=$<,if=floppy -drive format=raw,file=os-image-ide.bin,if=ide
+>$(QEMU_CLEAN_ENV) $(QEMU) -boot order=a -drive format=raw,file=$<,if=floppy -drive format=raw,file=os-image-ide.bin,if=ide
 
 run-serial: os-image.bin
 >cp $< os-image-ide.bin
->$(QEMU_CLEAN_ENV) $(QEMU) -drive format=raw,file=$<,if=floppy -drive format=raw,file=os-image-ide.bin,if=ide -serial stdio
+>$(QEMU_CLEAN_ENV) $(QEMU) -boot order=a -drive format=raw,file=$<,if=floppy -drive format=raw,file=os-image-ide.bin,if=ide -serial stdio
 
 echo: os-image.bin
 >xxd $<
