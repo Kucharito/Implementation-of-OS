@@ -65,7 +65,16 @@ void vga_putchar(char c) {
 	if (c == '\n') {
 		int row = offset / (VGA_WIDTH * 2);
 		offset = vga_row_start_offset(row + 1);
-	} else {
+	}
+	else if(c == '\b') {
+		if(offset > 0){
+			offset = offset -2;
+			vmem[offset] = ' ';
+			vmem[offset + 1] = VGA_COLOR;
+			vga_set_cursor_offset(offset);
+		}
+	}
+	else {
 		vmem[offset] = (unsigned char)c;
 		vmem[offset + 1] = VGA_COLOR;
 		offset += 2;
@@ -84,4 +93,36 @@ void vga_print(const char *str) {
 		vga_putchar(str[i]);
 		i++;
 	}
+}
+void vga_backspace(void)
+{
+	unsigned char *vmem = (unsigned char *)VIDEO_ADDRESS;
+	int offset = vga_get_cursor_offset();
+	if(offset <= 0){
+		return;
+	}
+	offset = offset -2;
+	vmem[offset] = ' ';
+	vmem[offset + 1] = VGA_COLOR;
+	vga_set_cursor_offset(offset);
+}
+
+void vga_clear(void){
+	unsigned char *vmem = (unsigned char *)VIDEO_ADDRESS;
+	int row;
+	int col;
+	for (row = 0; row < VGA_HEIGHT;row++)
+	{
+		for (col = 0; col< VGA_WIDTH;col++)
+		{
+			int pos = vga_row_start_offset(row) + col * 2;
+			vmem[pos] = ' ';
+			vmem[pos + 1] = VGA_COLOR;
+		}
+	}
+	vga_set_cursor_offset(0);
+}
+
+int vga_get_cursor_pos(void) {
+	return vga_get_cursor_offset();
 }

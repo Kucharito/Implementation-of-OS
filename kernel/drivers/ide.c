@@ -35,6 +35,7 @@ static void ata_io_delay(void) {
     inb(ATA_REG_ALTSTATUS);
 }
 
+
 static int ata_wait_not_busy(void) {
     unsigned char status;
     uint32_t timeout = ATA_WAIT_TIMEOUT;

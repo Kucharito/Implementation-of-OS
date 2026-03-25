@@ -4,8 +4,8 @@
 #include "serial.h"
 #include "io.h"
 #include "vga.h"
-#include "keyboard.h"
 #include "ide.h"
+#include "cli.h"
 
 void start_kernel() {
     uint8_t sector0[512];
@@ -33,14 +33,9 @@ void start_kernel() {
         serial_print("ATA/IDE read FAIL\n");
     }
 
-    vga_print("Waiting for keypress:\n");
-    serial_print("Waiting for keypress:\n");
+    vga_print("Starting CLI...\n");
+    serial_print("Starting CLI...\n");
 
-    while (1) {
-        int ch = keyboard_getchar();
-        
-        vga_putchar((char)ch);
-        serial_putchar((char)ch);
-    }
+    cli_loop();
 }
 

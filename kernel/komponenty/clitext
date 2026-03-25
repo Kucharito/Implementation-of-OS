@@ -1,0 +1,107 @@
+
+#include "cli.h"
+#include "keyboard.h"
+#include "vga.h"
+
+#define CLI_MAX_LINE_LEN 128
+#define CLI_MAX_ARGS 8
+
+static int cli_is_space(char c) {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+static void cli_execute(int argc, char *argv[]) {
+	(void)argv;
+
+	if (argc == 0) {
+		return;
+	}
+
+	if (argc == 1 && argv[0][0] == 'h' && argv[0][1] == 'e' && argv[0][2] == 'l' && argv[0][3] == 'p' && argv[0][4] == '\0') {
+		vga_print("Available: help\n");
+		return;
+	}
+
+	vga_print("Unknown command\n");
+}
+
+void cli_readline(char *buffer, int max_length)
+{
+	int pos = 0;
+	int start_cursor_pos;
+
+	if (buffer == 0 || max_length <= 0) {
+		return;
+	}
+
+	start_cursor_pos = vga_get_cursor_pos();
+
+	while (1) {
+		int ch = keyboard_getchar();
+
+		if (ch == '\n') {
+			vga_putchar('\n');
+			break;
+		}
+
+		if (ch == '\b') {
+			if (pos > 0 && vga_get_cursor_pos() > start_cursor_pos) {
+				pos--;
+				vga_backspace();
+			}
+			continue;
+		}
+
+		if (ch >= 32 && ch <= 126) {
+			if (pos < max_length - 1) {
+				buffer[pos++] = (char)ch;
+				vga_putchar((char)ch);
+			}
+		}
+	}
+
+	buffer[pos] = '\0';
+}
+
+int cli_parse(char *line, char* argv[], int max_args)
+{
+	int argc = 0;
+	int i = 0;
+
+	if (line == 0 || argv == 0 || max_args <= 0) {
+		return 0;
+	}
+
+	while (line[i] != '\0' && argc < max_args) {
+		while (line[i] != '\0' && cli_is_space(line[i])) {
+			line[i] = '\0';
+			i++;
+		}
+
+		if (line[i] == '\0') {
+			break;
+		}
+
+		argv[argc++] = &line[i];
+
+		while (line[i] != '\0' && !cli_is_space(line[i])) {
+			i++;
+		}
+	}
+
+	return argc;
+}
+
+void cli_loop()
+{
+	char line[CLI_MAX_LINE_LEN];
+	char *argv[CLI_MAX_ARGS];
+	int argc;
+
+	while (1) {
+		vga_print("> ");
+		cli_readline(line, CLI_MAX_LINE_LEN);
+		argc = cli_parse(line, argv, CLI_MAX_ARGS);
+		cli_execute(argc, argv);
+	}
+}

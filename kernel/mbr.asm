@@ -18,8 +18,9 @@ jmp $ ; sem by sa nemalo dostat
 [bits 16]
 load_kernel:
     mov bx, KERNEL_OFFSET ; citanie z disku do adresy 0x1000
-    ; kernel.bin je vacsi ako 2 sektory, treba nacitat viac sektorov.
-    mov dh, 9
+    ; Nacitaj viac sektorov, aby sa vosiel vacsi kernel s CLI.
+    ; kernel.bin ma teraz > 20 sektorov, preto citame 32 sektorov.
+    mov dh, 32
     mov dl, [BOOT_DRIVE]
     call disk_load
     ret

@@ -45,6 +45,7 @@ static char scancode_to_ascii(unsigned char scancode) {
 		case 0x0A: return '9';
 
 		case 0x39: return ' ';
+		case 0x0E: return '\b';
 		case 0x1C: return '\n';
 		default:   return 0;
 	}
