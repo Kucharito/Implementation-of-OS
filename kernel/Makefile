@@ -7,6 +7,8 @@ all: run
 QEMU ?= /usr/bin/qemu-system-i386
 QEMU_CLEAN_ENV = env -u LD_LIBRARY_PATH -u LD_PRELOAD -u GTK_PATH -u GIO_MODULE_DIR
 CFLAGS = -g -m32 -ffreestanding -fno-pie -fno-stack-protector -Iarch -Idrivers -Ikomponenty
+PAYLOAD_CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector
+PAYLOAD_LDFLAGS = -m elf_i386
 
 kernel.bin: kernel_entry.o kernel.o serial.o vga.o keyboard.o ide.o cli.o
 >ld -m elf_i386 -o $@ -Ttext 0x1000 $^ --oformat binary
@@ -42,13 +44,24 @@ os-image.bin: mbr.bin kernel.bin
 >cat $^ > $@
 >truncate -s 1474560 $@
 
-run: os-image.bin
->cp $< os-image-ide.bin
->$(QEMU_CLEAN_ENV) $(QEMU) -boot order=a -drive format=raw,file=$<,if=floppy -drive format=raw,file=os-image-ide.bin,if=ide
+payloads/hello_sector.o: payloads/hello_sector.c
+>cc $(PAYLOAD_CFLAGS) -c $< -o $@
 
-run-serial: os-image.bin
->cp $< os-image-ide.bin
->$(QEMU_CLEAN_ENV) $(QEMU) -boot order=a -drive format=raw,file=$<,if=floppy -drive format=raw,file=os-image-ide.bin,if=ide -serial stdio
+payloads/hello_sector.elf: payloads/hello_sector.o payloads/payload.ld
+>ld $(PAYLOAD_LDFLAGS) -T payloads/payload.ld payloads/hello_sector.o -o $@
+
+payloads/hello_sector.bin: payloads/hello_sector.elf
+>objcopy -O binary $< $@
+
+inject-hello: os-image.bin payloads/hello_sector.bin
+>cp os-image.bin os-image-ide.bin
+>dd if=payloads/hello_sector.bin of=os-image-ide.bin bs=512 seek=5 conv=notrunc
+
+run: inject-hello
+>$(QEMU_CLEAN_ENV) $(QEMU) -boot order=a -drive format=raw,file=os-image.bin,if=floppy -drive format=raw,file=os-image-ide.bin,if=ide
+
+run-serial: inject-hello
+>$(QEMU_CLEAN_ENV) $(QEMU) -boot order=a -drive format=raw,file=os-image.bin,if=floppy -drive format=raw,file=os-image-ide.bin,if=ide -serial stdio
 
 echo: os-image.bin
 >xxd $<
