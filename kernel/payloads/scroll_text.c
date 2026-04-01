@@ -9,7 +9,7 @@ static unsigned char inb(unsigned short p)
 
 void entry(void)
 {
-    static const char msg[] = "  AdamOS marquee demo - load + run from disk sector - press Q to return to CLI  ";
+    static const char msg[] = "  AdamOS demo - load + run from disk sector - press Q to return to CLI  ";
     int offset = 0;
     int i;
     int key;
