@@ -32,6 +32,7 @@ static char scancode_to_ascii(unsigned char scancode) {
 		case 0x2D: return 'x';
 		case 0x15: return 'y';
 		case 0x2C: return 'z';
+		case 0x34: return '.';
 
 		case 0x0B: return '0';
 		case 0x02: return '1';

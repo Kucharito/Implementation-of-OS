@@ -6,6 +6,7 @@
 #include "vga.h"
 #include "ide.h"
 #include "cli.h"
+#include "fat.h"
 
 void start_kernel() {
     uint8_t sector0[512];
@@ -32,6 +33,10 @@ void start_kernel() {
         vga_print("ATA/IDE read FAIL\n");
         serial_print("ATA/IDE read FAIL\n");
     }
+
+    vga_print("Initializing FAT16...\n");
+    serial_print("Initializing FAT16...\n");
+    fat16_init();
 
     vga_print("Starting CLI...\n");
     serial_print("Starting CLI...\n");

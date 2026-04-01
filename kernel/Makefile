@@ -6,11 +6,11 @@ all: run
 
 QEMU ?= /usr/bin/qemu-system-i386
 QEMU_CLEAN_ENV = env -u LD_LIBRARY_PATH -u LD_PRELOAD -u GTK_PATH -u GIO_MODULE_DIR
-CFLAGS = -g -m32 -ffreestanding -fno-pie -fno-stack-protector -Iarch -Idrivers -Ikomponenty
+CFLAGS = -g -m32 -ffreestanding -fno-pie -fno-stack-protector -Iarch -Idrivers -Ikomponenty -I../fat
 PAYLOAD_CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -Os -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables
 PAYLOAD_LDFLAGS = -m elf_i386 --gc-sections
 
-kernel.bin: kernel_entry.o kernel.o serial.o vga.o keyboard.o ide.o cli.o
+kernel.bin: kernel_entry.o kernel.o serial.o vga.o keyboard.o ide.o cli.o fat_kernel_adapter.o fat_state.o fat_common.o fat_disk.o fat_init.o fat_search.o fat_tree.o fat_dir.o fat_file.o
 >ld -m elf_i386 -o $@ -Ttext 0x1000 $^ --oformat binary
 
 kernel_entry.o: kernel_entry.asm
@@ -32,6 +32,33 @@ ide.o: drivers/ide.c drivers/ide.h arch/io.h
 >cc $(CFLAGS) -c $< -o $@
 
 cli.o: komponenty/cli.c komponenty/cli.h drivers/keyboard.h drivers/vga.h
+>cc $(CFLAGS) -c $< -o $@
+
+fat_kernel_adapter.o: komponenty/fat_kernel_adapter.c drivers/ide.h drivers/vga.h drivers/serial.h
+>cc $(CFLAGS) -c $< -o $@
+
+fat_state.o: ../fat/fat_state.c ../fat/fat_internal.h ../fat/fat.h
+>cc $(CFLAGS) -c $< -o $@
+
+fat_common.o: ../fat/fat_common.c ../fat/fat_internal.h ../fat/fat.h
+>cc $(CFLAGS) -c $< -o $@
+
+fat_disk.o: ../fat/fat_disk.c ../fat/fat_internal.h ../fat/fat.h
+>cc $(CFLAGS) -c $< -o $@
+
+fat_init.o: ../fat/fat_init.c ../fat/fat_internal.h ../fat/fat.h
+>cc $(CFLAGS) -c $< -o $@
+
+fat_search.o: ../fat/fat_search.c ../fat/fat_internal.h ../fat/fat.h
+>cc $(CFLAGS) -c $< -o $@
+
+fat_tree.o: ../fat/fat_tree.c ../fat/fat_internal.h ../fat/fat.h
+>cc $(CFLAGS) -c $< -o $@
+
+fat_dir.o: ../fat/fat_dir.c ../fat/fat_internal.h ../fat/fat.h
+>cc $(CFLAGS) -c $< -o $@
+
+fat_file.o: ../fat/fat_file.c ../fat/fat_internal.h ../fat/fat.h
 >cc $(CFLAGS) -c $< -o $@
 
 kernel.dis: kernel.bin
@@ -81,6 +108,21 @@ run-scroll: inject-scroll
 
 run-scroll-serial: inject-scroll
 >$(QEMU_CLEAN_ENV) $(QEMU) -boot order=a -drive format=raw,file=os-image.bin,if=floppy -drive format=raw,file=os-image-ide.bin,if=ide -serial stdio
+
+fat-image.bin: ../fat/sd.img mbr.bin kernel.bin
+>cp ../fat/sd.img fat-image.bin
+>dd if=mbr.bin of=fat-image.bin bs=1 count=446 conv=notrunc
+>dd if=kernel.bin of=fat-image.bin bs=512 seek=1 conv=notrunc
+
+sync-sdimg: ../fat/sd.img mbr.bin kernel.bin
+>dd if=mbr.bin of=../fat/sd.img bs=1 count=446 conv=notrunc
+>dd if=kernel.bin of=../fat/sd.img bs=512 seek=1 conv=notrunc
+
+run-fat: fat-image.bin
+>$(QEMU_CLEAN_ENV) $(QEMU) -boot order=c -drive format=raw,file=fat-image.bin,if=ide
+
+run-fat-serial: fat-image.bin
+>$(QEMU_CLEAN_ENV) $(QEMU) -boot order=c -drive format=raw,file=fat-image.bin,if=ide -serial stdio
 
 echo: os-image.bin
 >xxd $<

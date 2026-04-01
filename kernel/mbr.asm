@@ -18,9 +18,8 @@ jmp $ ; sem by sa nemalo dostat
 [bits 16]
 load_kernel:
     mov bx, KERNEL_OFFSET ; citanie z disku do adresy 0x1000
-    ; Nacitaj viac sektorov, aby sa vosiel vacsi kernel s CLI.
-    ; kernel.bin ma teraz > 20 sektorov, preto citame 32 sektorov.
-    mov dh, 32
+    ; kernel.bin ma aktualne 41 sektorov, nacitame ho v jednom kroku.
+    mov dh, 41
     mov dl, [BOOT_DRIVE]
     call disk_load
     ret
@@ -29,7 +28,6 @@ load_kernel:
 BEGIN_32BIT:
     call KERNEL_OFFSET ; odovzdanie riadenia jadru
     jmp $ ; ak sa jadro vrati, ostaneme tu
-
 
 BOOT_DRIVE db 0 ; ulozenie do pamate, lebo register 'dl' sa moze prepisat
 

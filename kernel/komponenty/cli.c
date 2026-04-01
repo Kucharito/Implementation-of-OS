@@ -1,6 +1,7 @@
 #include "cli.h"
 #include "keyboard.h"
 #include "vga.h"
+#include "fat.h"
 
 typedef unsigned int u32;
 typedef unsigned char u8;
@@ -12,6 +13,8 @@ int ide_write_sector(unsigned int lba, const void *buffer);
 #define CLI_MAX_ARGS 8
 #define CLI_DEFAULT_BUFFER_ADDR 0x00010000u
 #define CLI_DEFAULT_DUMP_LEN 128u
+#define CLI_EXEC_ADDR 0x00010000u
+#define CLI_EXEC_MAX_SIZE (64u * 1024u)
 
 static int cli_is_space(char c)
 {
@@ -184,6 +187,12 @@ static void cli_execute(int argc, char *argv[]){
         vga_print("Commands:\n");
         vga_print("help\n");
         vga_print("clear\n");
+        vga_print("ls\n");
+        vga_print("cat <filename>\n");
+        vga_print("cd <path>\n");
+        vga_print("tree\n");
+        vga_print("stat <filename>\n");
+        vga_print("exec <filename>\n");
         vga_print("read <lba>\n");
         vga_print("write <lba>\n");
         vga_print("load <lba> <addr>\n");
@@ -194,6 +203,90 @@ static void cli_execute(int argc, char *argv[]){
 
     if (cli_streq(argv[0], "clear")) {
         vga_clear();
+        return;
+    }
+
+    if (cli_streq(argv[0], "ls")) {
+        if (argc != 1) {
+            vga_print("Usage: ls\n");
+            return;
+        }
+        dir_listing();
+        return;
+    }
+
+    if (cli_streq(argv[0], "cat")) {
+        if (argc != 2) {
+            vga_print("Usage: cat <filename>\n");
+            return;
+        }
+        read_file(argv[1]);
+        vga_putchar('\n');
+        return;
+    }
+
+    if (cli_streq(argv[0], "cd")) {
+        if (argc != 2) {
+            vga_print("Usage: cd <path>\n");
+            return;
+        }
+
+        if (changeDir(argv[1]) != 0) {
+            vga_print("cd: path not found\n");
+        }
+        return;
+    }
+
+    if (cli_streq(argv[0], "tree")) {
+        if (argc != 1) {
+            vga_print("Usage: tree\n");
+            return;
+        }
+        printTree();
+        return;
+    }
+
+    if (cli_streq(argv[0], "stat")) {
+        if (argc != 2) {
+            vga_print("Usage: stat <filename>\n");
+            return;
+        }
+
+        if (stat_file(argv[1]) != 0) {
+            vga_print("stat: file not found\n");
+        }
+        return;
+    }
+
+    if (cli_streq(argv[0], "exec")) {
+        void (*func)(void);
+        u32 loaded_size = 0;
+
+        if (argc != 2) {
+            vga_print("Usage: exec <filename>\n");
+            return;
+        }
+
+        if (load_file(argv[1], (u8 *)CLI_EXEC_ADDR, CLI_EXEC_MAX_SIZE, &loaded_size) != 0) {
+            vga_print("exec: load failed\n");
+            return;
+        }
+
+        if (loaded_size == 0) {
+            vga_print("exec: file is empty\n");
+            return;
+        }
+
+        vga_print("exec: running at ");
+        cli_print_hex32(CLI_EXEC_ADDR);
+        vga_print(" size=");
+        cli_print_hex32(loaded_size);
+        vga_putchar('\n');
+
+        func = (void (*)(void))CLI_EXEC_ADDR;
+        func();
+
+        vga_print("exec: returned\n");
         return;
     }
 
