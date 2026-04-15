@@ -32,3 +32,5 @@ gt_switch:
         mov     0x30(%rsi), %rbp
 
         ret
+
+.section .note.GNU-stack,"",@progbits

@@ -1,5 +1,3 @@
-#include <assert.h>
-#include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -8,8 +6,153 @@
 #include "gthr_platform.h"
 #include "gthr_struct.h"
 
-static volatile sig_atomic_t gt_stats_requested;
 static uint8_t gt_stacks[MaxGThreads][StackSize];
+static bool gt_in_schedule;
+static enum gt_sched_policy gt_sched_policy_current = GtSchedPRI;
+static uint64_t gt_rng_state;
+static int gt_effective_priority(const struct gt *t);
+
+static int gt_clamp_priority(int priority){
+	if (priority < GtPriorityHighest)
+		return GtPriorityHighest;
+	if (priority > GtPriorityLowest)
+		return GtPriorityLowest;
+	return priority;
+}
+static struct gt *gt_next_slot(struct gt *p){
+	++p;
+	if (p == &gt_table[MaxGThreads])
+		return &gt_table[0];
+	return p;
+}
+
+static uint32_t gt_rand_u32(void) {
+	uint64_t x = gt_rng_state;
+
+	if (x == 0)
+		x = 0x9e3779b97f4a7c15ULL;
+
+	x ^= x >> 12;
+	x ^= x << 25;
+	x ^= x >> 27;
+	gt_rng_state = x;
+
+	return (uint32_t)((x * 2685821657736338717ULL) >> 32);
+}
+
+static unsigned int gt_thread_ticket_count(const struct gt *t) {
+	int base_priority = gt_clamp_priority(t->priority);
+
+	/* 0 priority gets most tickets, 10 gets the fewest, but never zero. */
+	return (unsigned int)(GtPriorityLowest - base_priority + 1);
+}
+
+static struct gt *gt_find_next_ready_rr(void) {
+	struct gt *start = gt_next_slot(gt_current);
+	struct gt *p = start;
+
+	do {
+		if (p->state == Ready)
+			return p;
+		p = gt_next_slot(p);
+	} while (p != start);
+
+	return NULL;
+}
+
+static struct gt *gt_find_next_ready_by_priority(void){
+	int priority;
+	struct gt *start = gt_next_slot(gt_current);
+	
+	for (priority = GtPriorityHighest; priority <= GtPriorityLowest; ++priority) {
+		struct gt *p = start;
+
+		do {
+			if (p->state == Ready && gt_effective_priority(p) == priority)
+				return p;
+			p = gt_next_slot(p);
+		} while (p != start);
+	}
+
+	return NULL;
+}
+
+static struct gt *gt_find_next_ready_lottery(void) {
+	unsigned int total_tickets = 0;
+	unsigned int draw;
+	unsigned int cumulative = 0;
+	int i;
+
+	for (i = 0; i < MaxGThreads; ++i) {
+		const struct gt *t = &gt_table[i];
+
+		if (t->state != Ready)
+			continue;
+
+		total_tickets += gt_thread_ticket_count(t);
+	}
+
+	if (total_tickets == 0)
+		return NULL;
+
+	draw = gt_rand_u32() % total_tickets;
+
+	for (i = 0; i < MaxGThreads; ++i) {
+		struct gt *t = &gt_table[i];
+
+		if (t->state != Ready)
+			continue;
+
+		cumulative += gt_thread_ticket_count(t);
+		if (draw < cumulative)
+			return t;
+	}
+
+	return NULL;
+}
+
+static void gt_age_ready_threads(const struct gt *selected){
+	int i;
+
+	for(i = 0;i<MaxGThreads;++i){
+		struct gt *t = &gt_table[i];
+
+		if (t->state != Ready || t == selected)
+			continue;
+
+		if (t->starvation_boost < GtPriorityLowest - GtPriorityHighest)
+			t->starvation_boost++;
+		t->starvation_rounds++;
+	}
+}
+
+static int gt_effective_priority(const struct gt *t){
+	int boosted = t-> priority - t-> starvation_boost;
+	if (boosted < GtPriorityHighest)
+		return GtPriorityHighest;
+	return boosted;
+}
+
+static const char *gt_sched_policy_name(void) {
+	switch (gt_sched_policy_current) {
+	case GtSchedRR:
+		return "RR";
+	case GtSchedLS:
+		return "LS";
+	case GtSchedPRI:
+	default:
+		return "PRI";
+	}
+}
+
+static void gt_handle_platform_tick(void) {
+	scheduler_tick();
+}
+
+static void gt_handle_platform_sigint(void) {
+	gt_dump_stats();
+	gt_platform_exit(0);
+}
 
 static uint64_t gt_now_us(void) {
 	return gt_platform_now_us();
@@ -39,6 +182,9 @@ static void gt_reset_thread_stats(struct gt *t, uint32_t tid, uint64_t now_us) {
 	t->entry = NULL;
 	t->arg = NULL;
 	t->exit_code = 0;
+	t->priority = GtPriorityLowest;
+	t->starvation_boost = 0;
+	t->starvation_rounds = 0;
 	t->last_state_change_us = now_us;
 	t->last_run_start_us = 0;
 	t->run_total_us = 0;
@@ -94,7 +240,8 @@ static void __attribute__((noreturn)) gt_thread_trampoline(void) {
 		entry(arg);
 
 	gt_exit(0);
-	assert(!"reachable");
+	for (;;) {
+	}
 }
 
 static bool gt_schedule_internal(void) {
@@ -102,23 +249,26 @@ static bool gt_schedule_internal(void) {
 	struct gt_context *old, *new;
 	uint64_t now_us = gt_now_us();
 
-	if (gt_stats_requested) {
-		gt_dump_stats();
-		gt_stats_requested = 0;
-	}
-
 	gt_account_running_slice(gt_current, now_us);
-	gt_reset_sig(SIGALRM);
-
-	p = gt_current;
-	while (p->state != Ready) {
-		if (++p == &gt_table[MaxGThreads])
-			p = &gt_table[0];
-		if (p == gt_current) {
-			gt_current->last_run_start_us = now_us;
-			return false;
-		}
+	switch (gt_sched_policy_current) {
+	case GtSchedRR:
+		p = gt_find_next_ready_rr();
+		break;
+	case GtSchedLS:
+		p = gt_find_next_ready_lottery();
+		break;
+	case GtSchedPRI:
+	default:
+		p = gt_find_next_ready_by_priority();
+		break;
 	}
+	if (!p) {
+		gt_current->last_run_start_us = now_us;
+		return false;
+	}
+
+	if (gt_sched_policy_current == GtSchedPRI)
+		gt_age_ready_threads(p);
 
 	if (gt_current->state != Unused) {
 		gt_current->state = Ready;
@@ -131,6 +281,8 @@ static bool gt_schedule_internal(void) {
 	p->schedule_count++;
 	p->last_state_change_us = now_us;
 	p->last_run_start_us = now_us;
+	if (gt_sched_policy_current == GtSchedPRI)
+		p->starvation_boost = 0;
 
 	old = &gt_current->ctx;
 	new = &p->ctx;
@@ -139,28 +291,14 @@ static bool gt_schedule_internal(void) {
 	return true;
 }
 
-// function triggered periodically by timer (SIGALRM)
-void gt_alarm_handle(int sig) {
-	(void)sig;
-	scheduler_tick();
-}
-
-// SIGINT handler only marks that a dump should be printed
-void gt_sigint_handle(int sig) {
-	(void)sig;
-	gt_stats_requested = 1;
-	gt_dump_stats();
-	gt_stats_requested = 0;
-	gt_platform_exit(0);
-}
-
 void gt_dump_stats(void) {
 	int i;
 	uint64_t now_us = gt_now_us();
 
 	gt_platform_printf("\n=== gthreads stats ===\n");
-	gt_platform_printf(" tid | state   | run_us | wait_us | switches | slices | min_us | max_us | avg_us | var_us\n");
-	gt_platform_printf("-----+---------+--------+---------+----------+--------+--------+--------+--------+--------\n");
+	gt_platform_printf(" scheduler = %s\n", gt_sched_policy_name());
+	gt_platform_printf(" tid | state   | base_prio | eff_prio | tickets | boost | run_us | wait_us | switches | slices | min_us | max_us | avg_us | var_us\n");
+	gt_platform_printf("-----+---------+-----------+----------+---------+-------+--------+---------+----------+--------+--------+--------+--------+--------\n");
 
 	for (i = 0; i < MaxGThreads; ++i) {
 		struct gt *t = &gt_table[i];
@@ -172,9 +310,13 @@ void gt_dump_stats(void) {
 		if (t->state == Ready)
 			wait += now_us - t->last_state_change_us;
 
-		gt_platform_printf(" %3u | %-7s | %6llu | %7llu | %8llu | %6llu | %6llu | %6llu | %6llu | %6llu\n",
+		gt_platform_printf(" %3u | %-7s | %9d | %8d | %7u | %5d | %6llu | %7llu | %8llu | %6llu | %6llu | %6llu | %6llu | %6llu\n",
 			(unsigned)t->tid,
 			gt_state_name(t->state),
+			t->priority,
+			gt_effective_priority(t),
+			gt_thread_ticket_count(t),
+			t->starvation_boost,
 			(unsigned long long)run,
 			(unsigned long long)wait,
 			(unsigned long long)t->schedule_count,
@@ -190,6 +332,8 @@ void gt_init(void) {
 	uint64_t now_us = gt_now_us();
 	int i;
 
+	gt_rng_state = now_us ^ 0x6a09e667f3bcc909ULL;
+
 	for (i = 0; i < MaxGThreads; ++i) {
 		gt_table[i].state = Unused;
 		gt_reset_thread_stats(&gt_table[i], (uint32_t)i, now_us);
@@ -200,17 +344,34 @@ void gt_init(void) {
 	gt_current->last_run_start_us = now_us;
 	gt_current->last_state_change_us = now_us;
 
-	gt_platform_register_signal(SIGALRM, gt_alarm_handle);
-	gt_platform_register_signal(SIGINT, gt_sigint_handle);
-	gt_reset_sig(SIGALRM);
+	gt_platform_install_periodic_tick(500, 500, gt_handle_platform_tick);
+	gt_platform_install_sigint(gt_handle_platform_sigint);
 }
 
 void scheduler_init(void) {
 	gt_init();
 }
 
+void gt_set_scheduler(enum gt_sched_policy policy) {
+	switch (policy) {
+	case GtSchedRR:
+	case GtSchedPRI:
+	case GtSchedLS:
+		gt_sched_policy_current = policy;
+		break;
+	default:
+		gt_sched_policy_current = GtSchedPRI;
+		break;
+	}
+}
+
 void scheduler_tick(void) {
+	if (gt_in_schedule)
+		return;
+
+	gt_in_schedule = true;
 	gt_schedule();
+	gt_in_schedule = false;
 }
 
 void __attribute__((noreturn)) gt_exit(int code) {
@@ -226,7 +387,8 @@ void __attribute__((noreturn)) gt_exit(int code) {
 		gt_current->arg = NULL;
 		gt_current->stack_base = NULL;
 		gt_schedule_internal();
-		assert(!"reachable");
+		for (;;) {
+		}
 	}
 
 	while (gt_schedule_internal()) {
@@ -251,7 +413,7 @@ void gt_stop(void) {
 	gt_exit(0);
 }
 
-int gt_create(gt_entry_fn_t entry, void *arg) {
+int gt_create(gt_entry_fn_t entry, void *arg, int priority) {
 	uint8_t *stack;
 	struct gt *p;
 	uint64_t now_us;
@@ -273,23 +435,13 @@ int gt_create(gt_entry_fn_t entry, void *arg) {
 	p->stack_base = stack;
 	p->entry = entry;
 	p->arg = arg;
+	p->priority = gt_clamp_priority(priority);
+	p->starvation_boost = 0;
+	p->starvation_rounds = 0;
 	p->state = Ready;
 	p->last_state_change_us = now_us;
 
 	return 0;
-}
-
-// resets SIGALRM signal
-void gt_reset_sig(int sig) {
-	if (sig == SIGALRM) {
-		gt_platform_clear_alarm();
-	}
-
-	gt_platform_unblock_signal(sig);
-
-	if (sig == SIGALRM) {
-		gt_platform_set_periodic_alarm_us(500, 500);
-	}
 }
 
 int gt_uninterruptible_nanosleep(time_t sec, long nanosec) {
