@@ -2,6 +2,8 @@
 #include "keyboard.h"
 #include "vga.h"
 #include "fat.h"
+#include "timer.h"
+#include "scheduler.h"
 
 typedef unsigned int u32;
 typedef unsigned char u8;
@@ -198,6 +200,7 @@ static void cli_execute(int argc, char *argv[]){
         vga_print("load <lba> <addr>\n");
         vga_print("dump <addr>\n");
         vga_print("run <addr>\n");
+        vga_print("timer\n");
         return;
     }
 
@@ -259,15 +262,22 @@ static void cli_execute(int argc, char *argv[]){
     }
 
     if (cli_streq(argv[0], "exec")) {
-        void (*func)(void);
         u32 loaded_size = 0;
+        uint32_t slot = 0;
+        uint32_t base = 0;
 
         if (argc != 2) {
             vga_print("Usage: exec <filename>\n");
             return;
         }
 
-        if (load_file(argv[1], (u8 *)CLI_EXEC_ADDR, CLI_EXEC_MAX_SIZE, &loaded_size) != 0) {
+        if (scheduler_find_free_slot(&slot) != 0) {
+            vga_print("exec: no free slot\n");
+            return;
+        }
+
+        base = PROC_BASE(slot);
+        if (load_file(argv[1], (u8 *)base, PROC_SLOT_SIZE, &loaded_size) != 0) {
             vga_print("exec: load failed\n");
             return;
         }
@@ -278,15 +288,15 @@ static void cli_execute(int argc, char *argv[]){
         }
 
         vga_print("exec: running at ");
-        cli_print_hex32(CLI_EXEC_ADDR);
+        cli_print_hex32(base);
+        vga_print(" slot=");
+        cli_print_hex32(slot);
         vga_print(" size=");
         cli_print_hex32(loaded_size);
         vga_putchar('\n');
 
-        func = (void (*)(void))CLI_EXEC_ADDR;
-        func();
-
-        vga_print("exec: returned\n");
+        scheduler_create_slot(slot, base);
+        scheduler_tick();
         return;
     }
 
@@ -362,6 +372,13 @@ static void cli_execute(int argc, char *argv[]){
         func();
 
         vga_print("Returned from code\n");
+        return;
+    }
+
+    if (cli_streq(argv[0], "timer")) {
+        vga_print("Timer tick counter: ");
+        cli_print_hex32(tick);
+        vga_putchar('\n');
         return;
     }
 
